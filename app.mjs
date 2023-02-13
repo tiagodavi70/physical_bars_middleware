@@ -15,13 +15,20 @@ web_server.get('/', function (req, res) {
 fs.readFile("settings.json", "utf8", (err, data_raw) => {
     if (err) throw err;
     let settings = JSON.parse(data_raw);
-    let scale = d3.scaleLinear()
-        .domain(settings.scale.domain)
-        .range(settings.scale.range)
     web_server.get('/scale', function (req, res) {
         let url_query = req.query;
-        // console.log(settings, url_query);
-        res.send(""+scale(+url_query["value"]));
+        if (url_query["value"] != undefined) {
+            let scale = d3.scaleLinear()
+                .domain(settings.scale.domain)
+                .range(settings.scale.range)
+            res.send(""+scale(+url_query["value"]));
+        } else {
+            let scale = d3.scaleLinear()
+                .domain(url_query["domain"].split(",").map(d=> +d))
+                .range(url_query["range"].split(",").map(d=> +d))
+            let data = url_query["data"].split(",").map(d => scale(+d))
+            res.send(JSON.stringify(data));
+        }
     }); 
 });
 
