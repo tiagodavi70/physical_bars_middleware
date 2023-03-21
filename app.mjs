@@ -49,6 +49,7 @@ let url_vizgen_base = "http://localhost:3000/chartgen.html"
 // http://localhost:5501/both/visualization?x=orange,pear,pineapple,strawberry&y=1,2,3,4&chart=barchartvertical&title=title
 web_server.get('/:mode/visualization', function (req, res) {
     let vizgen_query = req.originalUrl.split("?")[1];
+    let params = req.params;
     // console.log(`${url_vizgen2}?${vizgen_query}`);
 
     if (params.mode == "ra" || params.mode == "both") {
@@ -67,13 +68,10 @@ web_server.get('/:mode/visualization', function (req, res) {
 web_server.get('/:mode/colors?', function (req, res) {
     let url_query = req.query;
     let params = req.params;
-    // d3.text().then(text => {
-    //     console.log(text);
-    // });
 
     if (params.mode == "ra" || params.mode == "both") {
         let str_colors = "";
-        if (url_query["colors"] !== undefined) {
+        if (url_query["colors"] == undefined) {
             let colors = d3.scaleLinear(d3.schemeCategory10);
             str_colors = d3.range(10).map(d=>colors(d));
         } else {
