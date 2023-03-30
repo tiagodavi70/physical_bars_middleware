@@ -65,7 +65,7 @@ web_server.get('/info/:dataset/:fieldx/:fieldy', function (req, res) {
             scalebar = d3.scaleLinear()
                 .range([0, +url_query["max"]])
                 .domain([0, d3.max(data)]);
-        res.send(data.map(d => scalebar(d)));
+        res.send(data.map(d => +Number(scalebar(d)).toFixed(2)));
     })
 });
 
