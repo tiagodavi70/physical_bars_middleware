@@ -22,6 +22,7 @@ function getb64(t) {
 fs.readFile("settings.json", "utf8", (err, data_raw) => {
     if (err) throw err;
     let settings = JSON.parse(data_raw);
+    // http://localhost:5501/scale?domain=0,10&range=10,20&data=1,2,3,4,5
     web_server.get('/scale', function (req, res) {
         let url_query = req.query;
         if (url_query["value"] != undefined) {
@@ -36,12 +37,36 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
             let data = url_query["data"].split(",").map(d => scale(+d))
             res.send(JSON.stringify(data));
         }
-    }); 
+    });
 });
 
-web_server.get('/info', function (req, res) {}); // ?
+// http://localhost:5501/info/carros_teste/MARCA/VALOR
+web_server.get('/info/:dataset/:fieldx/:fieldy', function (req, res) {
+    let params = req.params;
+    let url_query = req.query;
 
-let url_vizgen = "http://localhost:3000/chartgen.html?x=orange,pear,strawberry,apple&y=1,2,3,4&chart=piechart&colors=rgb(255,103,0);rgb(144,238,144);rgb(252,90,141);rgb(255,8,0)"
+    console.log(`http://localhost:3000/field/${params.dataset}/${params.fieldx}/${params.fieldy}`);
+    Promise.all([d3.text(`http://localhost:3000/field/${params.dataset}/${params.fieldx}`),
+                 d3.text(`http://localhost:3000/field/${params.dataset}/${params.fieldy}`)]).then( columns =>{
+        let datax = columns[0].split(",");
+        let datay = columns[1].split(",");
+        
+        let data = [];
+        for (let i = 0; i < datax.length ; i++) {
+            data.push({"x": datax[i], "y": +datay[i]})
+        }
+        data = d3.rollup(data, v => d3.sum(v, s=>s.y), d => d.x);
+        data = Object.fromEntries(data);
+        data = Object.keys(data).map(d => data[d]);
+        data = data.slice(0,6);
+        let maxrange = +url_query["max"] || 100;
+        let scalebar = d3.scaleLinear()
+            .range([0, maxrange])
+            .domain([0, d3.max(data)]);
+        res.send(data.map(d => scalebar(d)));
+    })
+});
+
 let url_vizgen_base = "http://localhost:3000/chartgen.html"
 
 // http://localhost:5501/arduino/visualization
@@ -65,7 +90,7 @@ web_server.get('/:mode/visualization', function (req, res) {
 // http://localhost:5501/arduino/colors
 // http://localhost:5501/ra/colors
 // http://localhost:5501/both/colors
-web_server.get('/:mode/colors?', function (req, res) {
+web_server.get('/:mode/colors', function (req, res) {
     let url_query = req.query;
     let params = req.params;
 
