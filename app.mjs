@@ -41,11 +41,12 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 });
 
 // http://localhost:5501/info/carros_teste/MARCA/VALOR
+// http://localhost:5501/info/carros_teste/MARCA/VALOR?max=50&bars=8
+// http://localhost:5501/info/carros_teste/MARCA/VALOR?bars=4
 web_server.get('/info/:dataset/:fieldx/:fieldy', function (req, res) {
     let params = req.params;
     let url_query = req.query;
 
-    console.log(`http://localhost:3000/field/${params.dataset}/${params.fieldx}/${params.fieldy}`);
     Promise.all([d3.text(`http://localhost:3000/field/${params.dataset}/${params.fieldx}`),
                  d3.text(`http://localhost:3000/field/${params.dataset}/${params.fieldy}`)]).then( columns =>{
         let datax = columns[0].split(",");
@@ -58,11 +59,12 @@ web_server.get('/info/:dataset/:fieldx/:fieldy', function (req, res) {
         data = d3.rollup(data, v => d3.sum(v, s=>s.y), d => d.x);
         data = Object.fromEntries(data);
         data = Object.keys(data).map(d => data[d]);
-        data = data.slice(0,6);
-        let maxrange = +url_query["max"] || 100;
-        let scalebar = d3.scaleLinear()
-            .range([0, maxrange])
-            .domain([0, d3.max(data)]);
+        data = data.slice(0, +url_query["bars"] || 6);
+        let scalebar = d => d;
+        if(url_query["max"] != undefined)
+            scalebar = d3.scaleLinear()
+                .range([0, +url_query["max"]])
+                .domain([0, d3.max(data)]);
         res.send(data.map(d => scalebar(d)));
     })
 });
