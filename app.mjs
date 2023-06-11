@@ -6,7 +6,9 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import * as d3 from 'd3';
 import fs from 'fs';
-import { scaleLinear } from 'd3';
+import fetch from 'node-fetch';
+
+// const request = require('request');
 
 // const pages_path = __dirname + '/html';
 let tags = [`<title> Generated Chart </title><img src='data:image/png;base64,`,`' alt='generated chart'/>`];
@@ -38,7 +40,63 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
             res.send(JSON.stringify(data));
         }
     });
+	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR?max=50&bars=8
+	web_server.get('/mainPayload/:dataset/:fieldx/:fieldy', function (req, res) {
+		let url_query = req.query;
+		let params = req.params;
+
+		let payload = {};
+		getData(params.dataset, params.fieldx, params.fieldy, (data) => {
+			let catColors = "";
+			let nBars = +url_query["bars"] || 6;
+			let cats = [...new Set(data.map(d => d.x))].slice(0, nBars);
+			let catIndexes = [];
+
+			if (url_query["colors"] == undefined) {
+				let colors = d3.scaleOrdinal()
+					.domain(cats)
+					.range(d3.schemeCategory10);
+				catColors = cats.map(d => colors(d));
+				catIndexes = cats.map((d,i) => i);
+			}
+			let sizes = d3.rollup(data, v => d3.sum(v, s => s.y), d => d.x);
+			sizes = Object.fromEntries(sizes);
+			sizes = Object.keys(sizes).map(d => sizes[d]);
+			sizes = sizes.slice(0, nBars);
+			let scalebar = d => d;
+			if(url_query["max"] != undefined)
+				scalebar = d3.scaleLinear()
+					.range([0, +url_query["max"]])
+					.domain([0, d3.max(sizes)]);
+			sizes = sizes.map(d => +Number(scalebar(d)).toFixed(2));
+
+			payload.color = catColors;
+			payload.colorIndex = catIndexes;
+			payload.cat = cats;
+			payload.size = sizes;
+			
+			fetch('http://127.0.0.1:9600/mainPayload', {
+				method: 'post',
+				body: JSON.stringify(payload),
+				headers: {'Content-Type': 'application/json'}
+			});
+			res.send(payload);
+		});
+	});
 });
+
+function getData(dataset, x, y, cb) {
+    Promise.all([d3.text(`http://localhost:3000/field/${dataset}/${x}`),
+                 d3.text(`http://localhost:3000/field/${dataset}/${y}`)]).then( columns =>{
+        let dataX = columns[0].split(",");
+        let dataY = columns[1].split(",");
+        let data = [];
+        for (let i = 0; i < dataX.length ; i++) {
+            data.push({"x": dataX[i], "y": +dataY[i]})
+        }
+		cb(data);
+    });
+}
 
 // http://localhost:5501/info/carros_teste/MARCA/VALOR
 // http://localhost:5501/info/carros_teste/MARCA/VALOR?max=50&bars=8
@@ -47,26 +105,18 @@ web_server.get('/info/:dataset/:fieldx/:fieldy', function (req, res) {
     let params = req.params;
     let url_query = req.query;
 
-    Promise.all([d3.text(`http://localhost:3000/field/${params.dataset}/${params.fieldx}`),
-                 d3.text(`http://localhost:3000/field/${params.dataset}/${params.fieldy}`)]).then( columns =>{
-        let datax = columns[0].split(",");
-        let datay = columns[1].split(",");
-        
-        let data = [];
-        for (let i = 0; i < datax.length ; i++) {
-            data.push({"x": datax[i], "y": +datay[i]})
-        }
-        data = d3.rollup(data, v => d3.sum(v, s=>s.y), d => d.x);
-        data = Object.fromEntries(data);
-        data = Object.keys(data).map(d => data[d]);
-        data = data.slice(0, +url_query["bars"] || 6);
-        let scalebar = d => d;
-        if(url_query["max"] != undefined)
-            scalebar = d3.scaleLinear()
-                .range([0, +url_query["max"]])
-                .domain([0, d3.max(data)]);
-        res.send(data.map(d => +Number(scalebar(d)).toFixed(2)));
-    })
+	getData(params.dataset, params.fieldx, params.fieldy, (data) => {
+		data = d3.rollup(data, v => d3.sum(v, s => s.y), d => d.x);
+		data = Object.fromEntries(data);
+		data = Object.keys(data).map(d => data[d]);
+		data = data.slice(0, +url_query["bars"] || 6);
+		let scalebar = d => d;
+		if(url_query["max"] != undefined)
+			scalebar = d3.scaleLinear()
+				.range([0, +url_query["max"]])
+				.domain([0, d3.max(data)]);
+		res.send(data.map(d => +Number(scalebar(d)).toFixed(2)));
+	});
 });
 
 let url_vizgen_base = "http://localhost:3000/chartgen.html"
@@ -100,7 +150,7 @@ web_server.get('/:mode/colors', function (req, res) {
         let str_colors = "";
         if (url_query["colors"] == undefined) {
             let colors = d3.scaleLinear(d3.schemeCategory10);
-            str_colors = d3.range(10).map(d=>colors(d));
+            str_colors = d3.range(10).map(d => colors(d));
         } else {
             str_colors = url_query["colors"];
         }
@@ -109,13 +159,11 @@ web_server.get('/:mode/colors', function (req, res) {
     if (params.mode == "arduino" || params.mode == "both") {
 
     }
-    // res.send("Requisition wrong");
 });
+
+
 
 let web_port = "5501";
 web_server.listen(web_port, function () {
     console.log('Web Server for chart generation started listening on port: ' + web_port);
 });
-
-    
-
