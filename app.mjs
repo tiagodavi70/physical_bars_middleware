@@ -40,24 +40,25 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
             res.send(JSON.stringify(data));
         }
     });
-	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR?max=50&bars=8
-	web_server.get('/mainPayload/:dataset/:fieldx/:fieldy', function (req, res) {
+	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=8
+	web_server.get('/mainPayload/:dataset/:fieldx/:fieldy/:color', function (req, res) {
 		let url_query = req.query;
 		let params = req.params;
 
 		let payload = {};
-		getData(params.dataset, params.fieldx, params.fieldy, (data) => {
+		getData(params.dataset, [params.fieldx, params.fieldy, params.color], (data) => {
 			let catColors = "";
 			let nBars = +url_query["bars"] || 6;
 			let cats = [...new Set(data.map(d => d.x))].slice(0, nBars);
+			let catsColorValues = [...new Set(data.map(d => d.color))].slice(0, nBars);
 			let catIndexes = [];
 
 			if (url_query["colors"] == undefined) {
 				let colors = d3.scaleOrdinal()
-					.domain(cats)
+					.domain(catsColorValues)
 					.range(d3.schemeCategory10);
-				catColors = cats.map(d => colors(d));
-				catIndexes = cats.map((d,i) => i);
+				catColors = catsColorValues.map(d => colors(d));
+				catIndexes = catsColorValues.map((d,i) => i);
 			}
 			let sizes = d3.rollup(data, v => d3.sum(v, s => s.y), d => d.x);
 			sizes = Object.fromEntries(sizes);
@@ -72,7 +73,8 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 
 			payload.color = catColors;
 			payload.colorIndex = catIndexes;
-			payload.cat = cats;
+			payload.x = cats;
+			payload.catColors = catsColorValues;
 			payload.size = sizes;
 			
 			fetch('http://127.0.0.1:9600/mainPayload', {
@@ -85,14 +87,31 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 	});
 });
 
-function getData(dataset, x, y, cb) {
-    Promise.all([d3.text(`http://localhost:3000/field/${dataset}/${x}`),
-                 d3.text(`http://localhost:3000/field/${dataset}/${y}`)]).then( columns =>{
-        let dataX = columns[0].split(",");
-        let dataY = columns[1].split(",");
-        let data = [];
-        for (let i = 0; i < dataX.length ; i++) {
-            data.push({"x": dataX[i], "y": +dataY[i]})
+// function getData(dataset, x, y, cb) {
+//     Promise.all([d3.text(`http://localhost:3000/field/${dataset}/${x}`),
+//                  d3.text(`http://localhost:3000/field/${dataset}/${y}`)]).then( columns =>{
+//         let dataX = columns[0].split(",");
+//         let dataY = columns[1].split(",");
+//         let data = [];
+//         for (let i = 0; i < dataX.length ; i++) {
+//             data.push({"x": dataX[i], "y": +dataY[i]})
+//         }
+// 		cb(data);
+//     });
+// }
+
+function getData(dataset, cols, cb) {
+
+    Promise.all(cols.map(d => d3.text(`http://localhost:3000/field/${dataset}/${d}`))).then( columns =>{
+        let dataCols = [];
+		for (let i = 0; i < columns.length; i++) dataCols.push(columns[i].split(","));
+
+		let data = [];
+		let colNames = ["x", "y", "color"];
+        for (let i = 0; i < dataCols[0].length; i++) {
+			let temp = {};
+			for (let c = 0; c < columns.length; c++) temp[colNames[c]] = dataCols[c][i];
+			data.push(temp);
         }
 		cb(data);
     });
@@ -105,7 +124,7 @@ web_server.get('/info/:dataset/:fieldx/:fieldy', function (req, res) {
     let params = req.params;
     let url_query = req.query;
 
-	getData(params.dataset, params.fieldx, params.fieldy, (data) => {
+	getData(params.dataset, [params.fieldx, params.fieldy], (data) => {
 		data = d3.rollup(data, v => d3.sum(v, s => s.y), d => d.x);
 		data = Object.fromEntries(data);
 		data = Object.keys(data).map(d => data[d]);
