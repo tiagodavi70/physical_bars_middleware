@@ -17,6 +17,23 @@ function getb64(t) {
     return t.substring(tags[0].length, t.length - tags[1].length - tags[0].length);
 }
 
+// https://bost.ocks.org/mike/shuffle/
+function shuffle(array) {
+	var m = array.length, t, i;
+	// While there remain elements to shuffle…
+	while (m) {
+  
+	  // Pick a remaining element…
+	  i = Math.floor(Math.random() * m--);
+  
+	  // And swap it with the current element.
+	  t = array[m];
+	  array[m] = array[i];
+	  array[i] = t;
+	}  
+	return array;
+}
+
 // web_server.get('/', function (req, res) {
 //     res.sendFile('/index.html');
 // });
@@ -40,26 +57,38 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
             res.send(JSON.stringify(data));
         }
     });
-	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=8
+	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=6
+	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=6&sort=true
+	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=6&random=true
+	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=6&random=true&sort=true
 	web_server.get('/mainPayload/:dataset/:fieldx/:fieldy/:color', function (req, res) {
 		let url_query = req.query;
 		let params = req.params;
 
 		let payload = {};
 		getData(params.dataset, [params.fieldx, params.fieldy, params.color], (data) => {
+			
+			if (url_query["random"]) { shuffle(data); }
+			 
 			let catColors = "";
 			let nBars = +url_query["bars"] || 6;
 			let cats = [...new Set(data.map(d => d.x))].slice(0, nBars);
-			let catsColorValues = [...new Set(data.map(d => d.color))].slice(0, nBars);
+			let colorCol = data.map(d => d.color).slice(0, nBars)
+			let catsColorValues = [...new Set(colorCol)];
 			let catIndexes = [];
-
+			let colors = url_query["colors"];
+			
 			if (url_query["colors"] == undefined) {
-				let colors = d3.scaleOrdinal()
+				colors = d3.scaleOrdinal()
 					.domain(catsColorValues)
 					.range(d3.schemeCategory10);
-				catColors = catsColorValues.map(d => colors(d));
-				catIndexes = catsColorValues.map((d,i) => i);
 			}
+			function getColor(d,i) {
+				return colors.domain ? colors(d) : colors(i) ;
+			}
+			catColors = catsColorValues.map(getColor);
+			catIndexes = catsColorValues.map((d,i) => i);
+
 			let sizes = d3.rollup(data, v => d3.sum(v, s => s.y), d => d.x);
 			sizes = Object.fromEntries(sizes);
 			sizes = Object.keys(sizes).map(d => sizes[d]);
@@ -72,10 +101,23 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 			sizes = sizes.map(d => +Number(scalebar(d)).toFixed(2));
 
 			payload.color = catColors;
-			payload.colorIndex = catIndexes;
+			payload.colorIndex = colorCol.map((d,i) => catColors.indexOf(getColor(d,i)));
 			payload.x = cats;
 			payload.catColors = catsColorValues;
 			payload.size = sizes;
+
+			if (url_query['sort']) {
+				let toSort = [];
+				for (let i = 0; i < payload.size.length; i++) {
+					toSort.push({'s': payload.size[i], 'x': payload.x[i], 'c': payload.colorIndex[i]});
+				}
+				toSort.sort(function(a, b) {
+					return ((a.s > b.s) ? -1 : ((a.s == b.s) ? 0 : 1));
+				});
+				payload.colorIndex = toSort.map(d => d.c); 
+				payload.x = toSort.map(d => d.x);
+				payload.size = toSort.map(d => d.s);
+			}
 			
 			fetch('http://127.0.0.1:9600/mainPayload', {
 				method: 'post',
