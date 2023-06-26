@@ -68,7 +68,7 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 		let payload = {};
 		getData(params.dataset, [params.fieldx, params.fieldy, params.color], (data) => {
 			
-			if (url_query["random"]) { shuffle(data); }
+			if (url_query["random"] == "true") { shuffle(data); }
 			 
 			let catColors = "";
 			let nBars = +url_query["bars"] || 6;
@@ -106,7 +106,7 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 			payload.catColors = catsColorValues;
 			payload.size = sizes;
 
-			if (url_query['sort']) {
+			if (url_query['sort'] == "true") {
 				let toSort = [];
 				for (let i = 0; i < payload.size.length; i++) {
 					toSort.push({'s': payload.size[i], 'x': payload.x[i], 'c': payload.colorIndex[i]});
