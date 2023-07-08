@@ -61,6 +61,7 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=6&sort=true
 	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=6&random=true
 	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=6&random=true&sort=true
+	// http://localhost:5501/mainPayload/carros_teste/MARCA/VALOR/TIPO?max=50&bars=6&random=true&sort=true
 	web_server.get('/mainPayload/:dataset/:fieldx/:fieldy/:color', function (req, res) {
 		let url_query = req.query;
 		let params = req.params;
@@ -69,25 +70,25 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 		getData(params.dataset, [params.fieldx, params.fieldy, params.color], (data) => {
 			
 			if (url_query["random"] == "true") { shuffle(data); }
-			 
-			let catColors = "";
+
+			let colors = "";
 			let nBars = +url_query["bars"] || 6;
-			let cats = [...new Set(data.map(d => d.x))].slice(0, nBars);
-			let colorCol = data.map(d => d.color).slice(0, nBars)
-			let catsColorValues = [...new Set(colorCol)];
+			let categories = [...new Set(data.map(d => d.x))].slice(0, nBars);
+			let colorCol = data.map(d => d.color);
+			let catsColorNames = [...new Set(colorCol)].slice(0, nBars);
 			let catIndexes = [];
-			let colors = url_query["colors"];
-			
+			let colorScale = url_query["colors"];
+
 			if (url_query["colors"] == undefined) {
-				colors = d3.scaleOrdinal()
-					.domain(catsColorValues)
+				colorScale = d3.scaleOrdinal()
+					.domain(catsColorNames)
 					.range(d3.schemeCategory10);
 			}
 			function getColor(d,i) {
-				return colors.domain ? colors(d) : colors(i) ;
+				return colorScale.domain ? colorScale(d) : colorScale(i) ;
 			}
-			catColors = catsColorValues.map(getColor);
-			catIndexes = catsColorValues.map((d,i) => i);
+			colors = catsColorNames.map(getColor);
+			catIndexes = catsColorNames.map((d,i) => i);
 
 			let sizes = d3.rollup(data, v => d3.sum(v, s => s.y), d => d.x);
 			sizes = Object.fromEntries(sizes);
@@ -100,16 +101,20 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 					.domain([0, d3.max(sizes)]);
 			sizes = sizes.map(d => +Number(scalebar(d)).toFixed(2));
 
-			payload.color = catColors;
-			payload.colorIndex = colorCol.map((d,i) => catColors.indexOf(getColor(d,i)));
-			payload.x = cats;
-			payload.catColors = catsColorValues;
+			let specialCaseColors = categories.map(d=> data.filter(row=> row.x == d)[0].color);
+			payload.color = specialCaseColors.map(getColor)
+			payload.colorIndex = specialCaseColors.map((d,i) => colors.indexOf(getColor(d,i)));
+			payload.x = categories;
+			payload.catColors = specialCaseColors.map((d,i) => d);
+			payload.uniqueColors = catsColorNames;
 			payload.size = sizes;
 
+			
 			if (url_query['sort'] == "true") {
 				let toSort = [];
 				for (let i = 0; i < payload.size.length; i++) {
-					toSort.push({'s': payload.size[i], 'x': payload.x[i], 'c': payload.colorIndex[i]});
+					toSort.push({'s': payload.size[i], 'x': payload.x[i],
+								 'c': payload.colorIndex[i], 'cat': payload.catColors[i]});
 				}
 				toSort.sort(function(a, b) {
 					return ((a.s > b.s) ? -1 : ((a.s == b.s) ? 0 : 1));
@@ -117,6 +122,7 @@ fs.readFile("settings.json", "utf8", (err, data_raw) => {
 				payload.colorIndex = toSort.map(d => d.c); 
 				payload.x = toSort.map(d => d.x);
 				payload.size = toSort.map(d => d.s);
+				payload.catColors = toSort.map(d => d.cat);
 			}
 			
 			fetch('http://127.0.0.1:9600/mainPayload', {
