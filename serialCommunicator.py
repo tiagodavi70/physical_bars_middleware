@@ -1,74 +1,73 @@
 from flask import Flask, request, jsonify
 import serial
 import time
-import json
 
-port = 'COM3'  # Porta serial utilizada
-baud = 9600  # Velocidade de comunicação serial
-
+# flask config:
 app = Flask(__name__)
+mode = 'DEBUG' 	
 
-mode = 'DEBUG'
-
-@app.route('/defineTamanhoBarras', methods=['POST'])
-def handle_post():
-	json_data = request.get_json()
-	data = str(json_data['data'])
-
-	striped_data = data.replace(" ", "")
-	if mode != 'DEBUG':
-		sendToArduino(striped_data)
-	
-	return jsonify({'message': 'JSON recebido com sucesso!'})
-
-
+## server endpoint
 @app.route('/mainPayload', methods=['POST'])
 def payload():
-	
-	json_data = request.get_json()
-	print(json_data)
-	
-	return jsonify({'message': 'JSON recebido com sucesso!'})
+	data = request.get_json()
+	commands = converterDados(data)
 
+	# serial config:
+	port = 'COM4'  # Porta serial utilizada
+	baud = 9600  # Velocidade de comunicação serial
+
+	if(mode == 'DEBUG'):
+		return jsonify({'message': 'JSON recebido em modo DEBUG!'})
+ 
+	ser = serial.Serial(port, baud, timeout=1)
+	time.sleep(1)
+
+	for c in commands:
+		print(c)
+		ser.write(c.encode())
+		time.sleep(5)
+  
+	ser.close()	
+	return jsonify({'message': 'JSON recebido com sucesso!'})
+  
+def converterDados(data):
+	commands = []
+
+	list_string = []
+
+	#display categorias
+	for value in data["x"]:
+		if len(value) > 7:
+			str1 = value[:7]
+			str1 += "." * (7 - len(str1))
+		else:
+			str1 = value + "." * (7 - len(value))
+      
+		list_string.append(str1)
+    
+	list_string2 = [] 
+	while len(list_string2) < 6:    
+		for value in data["catColors"]:
+				if len(value) > 7:
+					str2 = value[:7]
+					str2 += "." * (7 - len(str1))
+				else:
+					str2 = value + "." * (7 - len(value))
+			
+				list_string2.append(str2)
+		    
+	commands.append("5_" + ','.join(str(value) for value in data["colorIndex"]))
+	commands.append("2_" + list_string[0] + '|' + list_string[1] + "," + list_string2[0] + '|' + list_string2[1])
+	commands.append("3_" + list_string[2] + '|' + list_string[3] + "," + list_string2[2] + '|' + list_string2[3])
+	commands.append("4_" + list_string[4] + '|' + list_string[5] + "," + list_string2[4] + '|' + list_string2[5]) 
+ 
+	print("2_" + list_string[0] + '|' + list_string[1] + "," + list_string2[0] + '|' + list_string2[1])
+	print("3_" + list_string[2] + '|' + list_string[3] + "," + list_string2[2] + '|' + list_string2[3])
+	print("4_" + list_string[4] + '|' + list_string[5] + "," + list_string2[4] + '|' + list_string2[5]) 
+  
+	commands.append("1_" + ','.join(str(value) for value in data["size"]))
+	commands.append("6")
+	return commands
 
 if __name__ == '__main__':
 	app.run(host="localhost", port=9600, debug=True)
-
-
-def sendToArduino(data):
-	# Configuração da porta serial
-	ser = serial.Serial(port, baud, timeout=1)
-
-	# Aguarda a inicialização da porta serial
-	time.sleep(1)
-
-	# Envia a string pela porta serial
-	ser.write(data.encode())
-	# Fecha a porta serial
-
-	while True:
-		# Lê uma linha da porta serial
-		line = ser.readline().decode().strip()
-		
-		# Imprime a linha lida
-		print(line)
-		
-		# Verifica se a tecla 'F' foi digitada
-		if 'F' in line:
-			ser.close()
-			break
-
-
-# String a ser enviada (valores double separados por vírgula)
-
-
-import serial
-
-# Configuração da porta serial
-ser = serial.Serial('COM1', 9600)
-
-# Lê as respostas da porta serial até que a tecla 'F' seja digitada
-
-
-# Fecha a porta serial
-ser.close()
